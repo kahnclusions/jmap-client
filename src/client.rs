@@ -55,6 +55,7 @@ pub struct Client {
     api_url: String,
     session_updated: AtomicBool,
     trusted_hosts: Arc<AHashSet<String>>,
+    connection_verbose: bool,
 
     upload_url: Vec<URLPart<blob::URLParameter>>,
     download_url: Vec<URLPart<blob::URLParameter>>,
@@ -74,6 +75,7 @@ pub struct Client {
 
 pub struct ClientBuilder {
     credentials: Option<Credentials>,
+    connection_verbose: bool,
     trusted_hosts: AHashSet<String>,
     forwarded_for: Option<String>,
     accept_invalid_certs: bool,
@@ -96,6 +98,7 @@ impl ClientBuilder {
             trusted_hosts: AHashSet::new(),
             timeout: Duration::from_millis(DEFAULT_TIMEOUT_MS),
             forwarded_for: None,
+            connection_verbose: false,
             accept_invalid_certs: false,
         }
     }
@@ -159,6 +162,11 @@ impl ClientBuilder {
         self
     }
 
+    pub fn connection_verbose(mut self, connection_verbose: bool) -> Self {
+        self.connection_verbose = connection_verbose;
+        self
+    }
+
     /// Set a list of trusted hosts that will be checked when a redirect is required.
     ///
     /// The list can be changed after the `Client` has been created by using [Client.set_follow_redirects()](struct.Client.html#method.set_follow_redirects).
@@ -214,6 +222,7 @@ impl ClientBuilder {
             &Client::handle_error(
                 HttpClient::builder()
                     .timeout(self.timeout)
+                    .connection_verbose(self.connection_verbose)
                     .danger_accept_invalid_certs(self.accept_invalid_certs)
                     .redirect(redirect::Policy::custom(move |attempt| {
                         if attempt.previous().len() > 5 {
@@ -261,6 +270,7 @@ impl ClientBuilder {
             session_url,
             session_updated: true.into(),
             accept_invalid_certs: self.accept_invalid_certs,
+            connection_verbose: self.connection_verbose,
             trusted_hosts,
             #[cfg(feature = "websockets")]
             authorization,
@@ -337,6 +347,7 @@ impl Client {
         let response: response::Response<R> = serde_json::from_slice(
             &Client::handle_error(
                 HttpClient::builder()
+                    .connection_verbose(self.connection_verbose)
                     .redirect(self.redirect_policy())
                     .danger_accept_invalid_certs(self.accept_invalid_certs)
                     .timeout(self.timeout)
@@ -364,6 +375,7 @@ impl Client {
         let session: Session = serde_json::from_slice(
             &Client::handle_error(
                 HttpClient::builder()
+                    .connection_verbose(self.connection_verbose)
                     .timeout(Duration::from_millis(DEFAULT_TIMEOUT_MS))
                     .danger_accept_invalid_certs(self.accept_invalid_certs)
                     .redirect(self.redirect_policy())
