@@ -363,6 +363,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub enum Error {
     Transport(reqwest::Error),
+    TransportWithMiddleware(reqwest_middleware::Error),
     Parse(serde_json::Error),
     Internal(String),
     Problem(Box<ProblemDetails>),
@@ -378,6 +379,12 @@ impl std::error::Error for Error {}
 impl From<reqwest::Error> for Error {
     fn from(e: reqwest::Error) -> Self {
         Error::Transport(e)
+    }
+}
+
+impl From<reqwest_middleware::Error> for Error {
+    fn from(e: reqwest_middleware::Error) -> Self {
+        Error::TransportWithMiddleware(e)
     }
 }
 
@@ -422,6 +429,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Transport(e) => write!(f, "Transport error: {}", e),
+            Error::TransportWithMiddleware(e) => write!(f, "Transport error: {}", e),
             Error::Parse(e) => write!(f, "Parse error: {}", e),
             Error::Internal(e) => write!(f, "Internal error: {}", e),
             Error::Problem(e) => write!(f, "Request failed: {}", e),

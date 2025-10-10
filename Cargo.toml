@@ -13,7 +13,7 @@ readme = "README.md"
 resolver = "2"
 
 [dependencies]
-reqwest = { version = "0.11", default-features = false, features = ["rustls-tls-webpki-roots"]}
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots"]}
 tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"], optional = true}
 tokio = { version = "1.16", default-features = false, features = ["io-util"], optional = true }
 futures-util = { version = "0.3", optional = true}
@@ -27,6 +27,8 @@ ahash = {version = "0.8", features = ["serde"]}
 parking_lot = "0.12"
 base64 = "0.13"
 maybe-async = "0.2"
+reqwest-middleware = "0.4.2"
+reqwest-retry = "0.7.0"
 
 [features]
 default = ["async", "websockets"]

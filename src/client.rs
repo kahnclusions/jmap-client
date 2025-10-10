@@ -26,8 +26,12 @@ use reqwest::{
     redirect,
 };
 #[cfg(feature = "async")]
-use reqwest::{Client as HttpClient, Response};
+use reqwest_middleware::{
+    reqwest, reqwest::Client as HttpClient, reqwest::Response, ClientBuilder as HttpClientBuilder,
+    ClientWithMiddleware,
+};
 
+use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use serde::de::DeserializeOwned;
 
 use crate::{
@@ -218,9 +222,8 @@ impl ClientBuilder {
 
         let trusted_hosts_ = trusted_hosts.clone();
         let session_url = format!("{}/.well-known/jmap", url);
-        let session: Session = serde_json::from_slice(
-            &Client::handle_error(
-                HttpClient::builder()
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+        let http_client = HttpClient::builder()
                     .timeout(self.timeout)
                     .connection_verbose(self.connection_verbose)
                     .danger_accept_invalid_certs(self.accept_invalid_certs)
@@ -238,16 +241,15 @@ impl ClientBuilder {
                             attempt.error(message)
                         }
                     }))
-                    .default_headers(headers.clone())
-                    .build()?
-                    .get(&session_url)
-                    .send()
-                    .await?,
-            )
-            .await?
-            .bytes()
-            .await?,
-        )?;
+                    .default_headers(headers.clone()).build()?;
+        let res = HttpClientBuilder::new(http_client)
+            .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+            .build()
+            .get(&session_url)
+            .send()
+            .await?;
+        let session: Session =
+            serde_json::from_slice(&Client::handle_error(res).await?.bytes().await?)?;
 
         let default_account_id = session
             .primary_accounts()
@@ -344,19 +346,24 @@ impl Client {
     where
         R: DeserializeOwned,
     {
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
         let response: response::Response<R> = serde_json::from_slice(
             &Client::handle_error(
-                HttpClient::builder()
-                    .connection_verbose(self.connection_verbose)
-                    .redirect(self.redirect_policy())
-                    .danger_accept_invalid_certs(self.accept_invalid_certs)
-                    .timeout(self.timeout)
-                    .default_headers(self.headers.clone())
-                    .build()?
-                    .post(&self.api_url)
-                    .body(serde_json::to_string(&request)?)
-                    .send()
-                    .await?,
+                HttpClientBuilder::new(
+                    HttpClient::builder()
+                        .connection_verbose(self.connection_verbose)
+                        .redirect(self.redirect_policy())
+                        .danger_accept_invalid_certs(self.accept_invalid_certs)
+                        .timeout(self.timeout)
+                        .default_headers(self.headers.clone())
+                        .build()?,
+                )
+                .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+                .build()
+                .post(&self.api_url)
+                .body(serde_json::to_string(&request)?)
+                .send()
+                .await?,
             )
             .await?
             .bytes()
@@ -372,18 +379,23 @@ impl Client {
 
     #[maybe_async::maybe_async]
     pub async fn refresh_session(&self) -> crate::Result<()> {
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
         let session: Session = serde_json::from_slice(
             &Client::handle_error(
-                HttpClient::builder()
-                    .connection_verbose(self.connection_verbose)
-                    .timeout(Duration::from_millis(DEFAULT_TIMEOUT_MS))
-                    .danger_accept_invalid_certs(self.accept_invalid_certs)
-                    .redirect(self.redirect_policy())
-                    .default_headers(self.headers.clone())
-                    .build()?
-                    .get(&self.session_url)
-                    .send()
-                    .await?,
+                HttpClientBuilder::new(
+                    HttpClient::builder()
+                        .connection_verbose(self.connection_verbose)
+                        .timeout(Duration::from_millis(DEFAULT_TIMEOUT_MS))
+                        .danger_accept_invalid_certs(self.accept_invalid_certs)
+                        .redirect(self.redirect_policy())
+                        .default_headers(self.headers.clone())
+                        .build()?,
+                )
+                .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+                .build()
+                .get(&self.session_url)
+                .send()
+                .await?,
             )
             .await?
             .bytes()
