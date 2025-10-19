@@ -40,5 +40,5 @@ debug = []
 [lib]
 doctest = false
 
-[profile.bench]
-debug = true
+# [profile.bench]
+# debug = true
